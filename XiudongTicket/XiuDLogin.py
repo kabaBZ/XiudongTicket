@@ -27,7 +27,11 @@ class XiuDongLogin(object):
         self.page.get(url)
         login_status = self.check_login()
         if not login_status:
-            print("请在两分钟内登录")
+            raise Exception("请在两分钟内登录")
+
+    def click_pay(self):
+        self.page.ele("tag:uni-view@@class:payBtn", timeout=120).click()
+        self.page.ele("tag:uni-view@@class:wxpay", timeout=120).click()
 
     def get_localStorage(self):
         return self.page.local_storage()
