@@ -3,6 +3,7 @@
 import time
 
 from DrissionPage import WebPage
+from DrissionPage._functions.web import set_browser_cookies
 
 # path = r"D:\Chrome\Chrome.exe"  # 请改为你电脑内Chrome可执行文件路径
 # co = ChromiumOptions().set_browser_path(path)
@@ -32,6 +33,12 @@ class XiuDongLogin(object):
     def click_pay(self):
         self.page.ele("tag:uni-view@@class:payBtn", timeout=120).click()
         self.page.ele("tag:uni-view@@class:wxpay", timeout=120).click()
+
+    def get_cookie(self):
+        return self.page.cookies()
+
+    def set_cookie(self, cookie):
+        set_browser_cookies(self.page, cookie)
 
     def get_localStorage(self):
         return self.page.local_storage()

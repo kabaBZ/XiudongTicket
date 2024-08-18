@@ -26,16 +26,21 @@ class XiuDong(object):
 
     def init_browser(self):
         self.XD_browser = XiuDongLogin()
-        if os.path.exists("./local_storage.json"):
+        if os.path.exists("./local_storage.json") and os.path.exists("./cookie.json"):
             local_storage = json.load(
                 open("./local_storage.json", "r", encoding="utf-8")
             )
             for k, v in local_storage.items():
                 self.XD_browser.set_localStorage(k, v)
+            cookie = json.load(open("./cookie.json", "r", encoding="utf-8"))
+            self.XD_browser.set_cookie(cookie)
         self.XD_browser.open_login_page()
         self.local_storage = self.XD_browser.get_localStorage()
         with open("./local_storage.json", "w", encoding="utf-8") as f:
-            json.dump(local_storage, f, ensure_ascii=False, indent=4)
+            json.dump(self.local_storage, f, ensure_ascii=False, indent=4)
+        self.cookie = self.XD_browser.get_cookie()
+        with open("./cookie.json", "w", encoding="utf-8") as f:
+            json.dump(self.cookie, f, ensure_ascii=False, indent=4)
 
     def init_js_ctx(self):
         # 读取JavaScript文件内容
@@ -220,7 +225,7 @@ class XiuDong(object):
                     "goodsName": orderInfoVo["title"],
                 }
             ],
-            "commonPerfomerIds": [commonPerfomerIds],
+            "commonPerfomerIds": commonPerfomerIds,
             "areaCode": "86_CN",
             "telephone": orderInfoVo["telephone"],
             "addressId": addressId,
@@ -231,8 +236,8 @@ class XiuDong(object):
             "discount": 0,
             "sessionId": orderInfoVo["sessionId"],
             "freight": 0,
-            "amountPayable": str(ticketPriceVo["price"]),
-            "totalAmount": str(ticketPriceVo["price"]),
+            "amountPayable": str(int(ticketPriceVo["price"]) * int(ticketNum)),
+            "totalAmount": str(int(ticketPriceVo["price"]) * int(ticketNum)),
             "partner": "",
             "orderSource": 1,
             "videoId": "",
@@ -430,8 +435,9 @@ class XiuDong(object):
         return []
 
     def add_addr(self):
+        addr_list = self.addr_list()
         if not self.conf.has_section("addr_dict"):
-            return ""
+            return addr_list[0]["id"]
         addr_dict = self.conf["addr_dict"]
         logger.debug("地址信息:")
         for k, v in addr_dict.items():
@@ -457,19 +463,20 @@ class XiuDong(object):
         add_addr_result = res.json()
         if add_addr_result.get("status") != 200 or add_addr_result["state"] != "1":
             logger.warning(f"add_addr函数响应结果：{add_addr_result}")
-        addr_list = self.addr_list()
         for addr in addr_list:
             if addr["address"] == addr_dict["address"]:
                 return addr["id"]
         else:
             return ""
 
-    def add_id(self):
+    def add_id(self) -> list:
         id_dict = self.conf["id_dict"]
         id_list = self.id_list()
+        if not id_dict.get("documentNumber"):
+            return [id["id"] for id in id_list]
         for id in id_list:
             if id["name"] == id_dict["name"]:
-                return id["id"]
+                return [id["id"]]
         logger.debug(f'开始添加身份证信息：{id_dict["name"]}，{id_dict["documentNumber"]}')
         res = self.postRequest(
             "/wap/cp/addOrUp",
@@ -513,7 +520,18 @@ class XiuDong(object):
         activityId = self.conf["Ticket"].getint("activityId")
         if not activityId:
             activityId = input("请输入活动ID：")
-        ticket_list = self.get_tickets_info_list(activityId)[0]["ticketList"]
+        # 这里区分日期，一场活动多个日期
+        # todo增加选择日期的流程
+
+        ticket_info_list = self.get_tickets_info_list(activityId)
+        if len(ticket_info_list) == 1:
+            ticket_list = ticket_info_list[0]["ticketList"]
+        else:
+            for ticket_info in ticket_info_list:
+                logger.info(f"日期序号：{ticket_info_list.index(ticket_info)}")
+                logger.info(f"日期：{ticket_info['sessionName']}")
+            index = input("请输入日期序号：")
+            ticket_list = ticket_info_list[int(index)]["ticketList"]
         for ticket in ticket_list:
             logger.info(f"票序号：{ticket_list.index(ticket)}")
             logger.info(f"票种：{ticket['ticketType']}")
@@ -530,14 +548,19 @@ class XiuDong(object):
         addressId = self.add_addr()
 
         chosen_ticket = ticket_list[int(index)]
-        confirm_result = self.confirm_order_info(activityId, chosen_ticket["ticketId"])
+        confirm_result = self.confirm_order_info(
+            activityId, chosen_ticket["ticketId"], str(len(commonPerfomerIds))
+        )
 
         self.count_down(chosen_ticket["startTime"])
 
         while True:
             try:
                 submit_result = self.submit_order(
-                    confirm_result, commonPerfomerIds, addressId
+                    confirm_result,
+                    commonPerfomerIds,
+                    addressId,
+                    str(len(commonPerfomerIds)),
                 )
                 if not submit_result.get("orderJobKey"):
                     time.sleep(0.2)

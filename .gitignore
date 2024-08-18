@@ -4,6 +4,9 @@ node_modules
 package.json
 package-lock.json
 local_storage.json
+cookie.json
+local_storagez.json
+cookiez.json
 .idea
 settings.ini
 *.log
